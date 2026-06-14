@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Callable
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.orm import Session, joinedload
 
@@ -19,8 +19,14 @@ from app.core.security import decode_access_token
 from app.database import get_db
 from app.models.user import User
 
-# tokenUrl is informational for OpenAPI / Swagger UI. The actual login is at /auth/login.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+# HTTPBearer makes the Swagger UI "Authorize" dialog show a single token-paste
+# field, which matches our actual flow: clients POST JSON to /auth/login, get
+# an access_token, then send `Authorization: Bearer <token>` on every request.
+# We previously used OAuth2PasswordBearer, but its Swagger form posts
+# form-encoded username/password to tokenUrl — which conflicts with our JSON
+# login endpoint and made the Authorize button confusing/broken in /docs.
+# auto_error=False so we can produce a uniform 401 ourselves (with WWW-Auth).
+bearer_scheme = HTTPBearer(auto_error=False, description="Paste the access_token returned by POST /auth/login")
 
 
 _CREDENTIALS_EXC = HTTPException(
@@ -31,15 +37,15 @@ _CREDENTIALS_EXC = HTTPException(
 
 
 def get_current_user(
-    token: str | None = Depends(oauth2_scheme),
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     """Resolve the authenticated user from the bearer token. Raises 401 on failure."""
-    if not token:
+    if creds is None or creds.scheme.lower() != "bearer" or not creds.credentials:
         raise _CREDENTIALS_EXC
 
     try:
-        payload = decode_access_token(token)
+        payload = decode_access_token(creds.credentials)
     except JWTError:
         raise _CREDENTIALS_EXC
 
