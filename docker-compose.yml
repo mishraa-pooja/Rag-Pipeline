@@ -1,0 +1,51 @@
+name: rag-anjali
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: rag_anjali_qdrant
+    restart: unless-stopped
+    ports:
+      # Bind only to localhost: Qdrant has no auth in dev mode.
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_anjali_api
+    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override host so the API talks to the qdrant service inside the compose network.
+      QDRANT_URL: http://qdrant:6333
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Read-only root FS would be nice but sentence-transformers caches models under
+    # the user's home dir; we keep RW root for simplicity. A future hardening step
+    # could mount a tmpfs at /home/appuser/.cache and a dedicated cache volume.
+
+volumes:
+  qdrant_storage:

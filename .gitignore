@@ -1,0 +1,55 @@
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Assignment brief (Nimap IP, not for public distribution) ---
+Nimap*.pdf
+
+# --- App data ---
+# Use `data/*` (not `data/`) so the !data/.gitkeep exception can re-include
+# the placeholder. Git refuses to re-include files inside a fully-excluded
+# directory.
+data/*
+!data/.gitkeep
+
+# --- IDE / OS / tool state ---
+.idea/
+.vscode/
+.cursor/
+.qodo/
+.DS_Store
+*.swp
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Docker volumes ---
+qdrant_storage/
+
+# --- HuggingFace / model caches (in case anyone runs without a containerized HOME) ---
+.cache/
+hf_cache/
+
+# --- SQLite stray files ---
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
