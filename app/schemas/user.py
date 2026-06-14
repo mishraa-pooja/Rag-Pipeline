@@ -19,6 +19,11 @@ class UserBrief(BaseModel):
     roles: list[str] = []
 
 
+class UserListResponse(BaseModel):
+    total: int
+    items: list[UserBrief]
+
+
 class UserRolesResponse(BaseModel):
     user_id: str
     roles: list[str]

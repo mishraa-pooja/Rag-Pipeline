@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import require_permission
@@ -17,7 +18,12 @@ from app.database import get_db
 from app.models.role import Permission, Role
 from app.models.user import User
 from app.schemas.role import AssignRoleRequest, RoleCreateRequest, RoleResponse
-from app.schemas.user import UserPermissionsResponse, UserRolesResponse
+from app.schemas.user import (
+    UserBrief,
+    UserListResponse,
+    UserPermissionsResponse,
+    UserRolesResponse,
+)
 
 router = APIRouter(tags=["roles"])
 
@@ -88,6 +94,57 @@ def assign_role(
         db.refresh(user)
 
     return UserRolesResponse(user_id=user.id, roles=[r.name for r in user.roles])
+
+
+@router.get("/users", response_model=UserListResponse)
+def list_users(
+    q: str | None = Query(
+        default=None,
+        max_length=255,
+        description="Case-insensitive substring match against username OR email.",
+    ),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10_000),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(Perm.USER_MANAGE)),
+) -> UserListResponse:
+    """List users (admin only). Useful for finding a user's id before calling
+    /users/{user_id}/roles or /users/assign-role.
+    """
+    query = db.query(User).options(joinedload(User.roles))
+    if q:
+        # ilike works on SQLite (case-insensitive ASCII) and Postgres.
+        # We pre-escape SQL LIKE wildcards in the user-supplied substring so a
+        # search for "a%" doesn't unintentionally match everything.
+        safe = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{safe}%"
+        query = query.filter(
+            or_(
+                User.username.ilike(pattern, escape="\\"),
+                User.email.ilike(pattern, escape="\\"),
+            )
+        )
+
+    total = query.count()
+    rows = (
+        query.order_by(User.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    items = [
+        UserBrief(
+            id=u.id,
+            email=u.email,
+            username=u.username,
+            company_name=u.company_name,
+            is_active=u.is_active,
+            created_at=u.created_at,
+            roles=[r.name for r in u.roles],
+        )
+        for u in rows
+    ]
+    return UserListResponse(total=total, items=items)
 
 
 @router.get("/users/{user_id}/roles", response_model=UserRolesResponse)
